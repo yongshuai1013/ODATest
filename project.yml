@@ -7,7 +7,7 @@ options:
     iOS: "15.0"
 packages:
   SideSign:
-    url: https://github.com/SideStore/SideSign.git
+    url: https://github.com/yongshuai1013/SideSign.git
     branch: main
 targets:
   ODATest:
