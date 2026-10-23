@@ -1,20 +1,21 @@
-# ODATest — On-Device Anisette 測試
+# ODATest — On-Device Anisette 登入測試
 
-專門測試 SideStore 的 **On-Device Anisette**（mahee96/AnisetteKit）在真機上能不能跑通的最小 App。
+專門測試 SideStore 的 **On-Device Anisette（ODA）** 能不能在真機上完成一次真正的 Apple ID 登入的最小 App。接線與 SideStore 相同：SideSign 的 `AnisetteDataManager`（remoteODA 模式）+ `DeveloperPortal.authenticate`。
 
-## 它怎麼運作
+## 流程
 
-1. **下載運行庫**：抓 `https://zzz.haus/oda.json`（SideStore 官方同一個來源），解出 `libCoreADI.so` + `libstoreservicescore.so`（Android 版 Apple 私有庫），驗 SHA-256，存到 App 的 `Documents/ODA/libs/`。
-2. **本地生成**：AnisetteKit 用自訂 ELF loader 把 .so 載入 **Unicorn 引擎（TCI 純解釋模式，不需要 JIT）** 裡執行，在裝置本機完成 ADI provisioning（對 Apple `gsa.apple.com/grandslam/GsService2/lookup` 起三步流程），把 `adi.pb` 存到 `Documents/ODA/provisioning/`，之後直接生成 anisette headers（X-Apple-I-MD 等）。
+1. **本地 anisette**：`AnisetteDataManager` 在需要時自己下載 `https://zzz.haus/oda.json` 的運行庫（`libCoreADI.so` + `libstoreservicescore.so`），用 AnisetteKit 在 **Unicorn 引擎（TCI 純解釋、不需 JIT）** 裡執行 CoreADI，於裝置本機完成 ADI provisioning 並生成 anisette headers。`adi.pb` 存在 App 的 `Documents/ODA/`。
+2. **登入**：`DeveloperPortal.authenticate(appleID:password:anisetteData:xcodeVersion: "26.0", verificationHandler:)` 走 GrandSlam SRP；需要 2FA 時 App 會跳出面板讓你選信任裝置／SMS／語音並輸入驗證碼。
+3. **驗證**：登入成功後自動 `fetchTeams`，畫面列出帳號的 teams，證明 session 真的可用（不只是拿到 token）。
 
-## 使用
+## 對照實驗（閃退歸因）
 
-1. 裝好打開 App，依序按「① 下載運行庫」→「② 生成 Anisette」。
-2. 首次生成會先 provisioning，Unicorn 模擬跑加密運算，在舊機上可能要幾分鐘，畫面有秒數計時，不要關 App。
-3. 成功後把 headers 和完整日誌複製回報；失敗也請把日誌整份回報（裡面有錯誤碼）。
+SideStore 開 ODA 按登入閃退（官方 issue #1582）的主因指向：免費安裝版缺 `increased-memory-limit` / `extended-virtual-addressing` entitlements，Unicorn 在舊機上分配 translator buffer 失敗後直接終止進程。
+
+本 App 的 IPA **帶這兩個 entitlements**（CI 以 ad-hoc 簽名嵌入），**請用 TrollStore 安裝**（會保留 entitlements）。若在 iPhone 7 上能跑通登入，即坐實該歸因。
 
 ## 注意
 
-- client-info 用 AnisetteKit 預設（MacBookPro18,3 / macOS 26.6 的 AuthKit 身份）。
-- 「重置 ADI」會刪掉 adi.pb，下一次生成會重新 provisioning。
-- 所有檔案都在 `Documents/ODA/`，可用系統「文件」App 瀏覽。
+- 密碼只傳給 Apple，不保存、不寫日誌；session 只存記憶體，登出即清。
+- 首次登入要做完整 provisioning，Unicorn 模擬在舊機上可能要幾分鐘，畫面有秒數，不要關 App。
+- 「重置 ADI」刪掉 adi.pb 後，下次登入會重新 provisioning。

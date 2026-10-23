@@ -1,4 +1,4 @@
-# ODATest — SideStore On-Device Anisette（AnisetteKit）真機測試 App
+# ODATest — SideStore On-Device Anisette 登入測試 App
 # 用 XcodeGen 生成項目，設定盡量精簡
 name: ODATest
 options:
@@ -6,12 +6,9 @@ options:
   deploymentTarget:
     iOS: "15.0"
 packages:
-  AnisetteKit:
-    url: https://github.com/mahee96/AnisetteKit.git
+  SideSign:
+    url: https://github.com/SideStore/SideSign.git
     branch: main
-  ZIPFoundation:
-    url: https://github.com/weichsel/ZIPFoundation.git
-    from: "0.9.19"
 targets:
   ODATest:
     type: application
@@ -20,10 +17,10 @@ targets:
     sources:
       - ODATest
     dependencies:
-      - package: AnisetteKit
-        product: AnisetteKit
-      - package: ZIPFoundation
-        product: ZIPFoundation
+      - package: SideSign
+        product: SideSign
+    entitlements:
+      path: ODATest.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pax.odatest
@@ -34,7 +31,7 @@ targets:
     info:
       path: ODATest/Info.plist
       properties:
-        CFBundleDisplayName: ODA測試
+        CFBundleDisplayName: ODA登入測試
         CFBundleName: ODATest
         UILaunchScreen: {}
         UIFileSharingEnabled: true

@@ -44,6 +44,11 @@ jobs:
             CODE_SIGNING_REQUIRED=NO
           mkdir -p build/ipa/Payload
           cp -R build/ODATest.xcarchive/Products/Applications/ODATest.app build/ipa/Payload/
+          # ad-hoc 簽名並嵌入 entitlements（increased-memory-limit 等）：
+          # TrollStore 安裝時會讀取並保留這些 entitlements，正是本次對照實驗所需
+          codesign --force --sign - --entitlements ODATest.entitlements --timestamp=none build/ipa/Payload/ODATest.app
+          echo "=== embedded entitlements ==="
+          codesign -d --entitlements - build/ipa/Payload/ODATest.app || true
           cd build/ipa && zip -r ../ODATest-unsigned.ipa Payload
 
       - name: 上傳未簽名 IPA
