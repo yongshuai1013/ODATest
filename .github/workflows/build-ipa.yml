@@ -1,0 +1,53 @@
+# 在 GitHub Actions 上編譯 ODATest 並打出未簽名 IPA
+# 所有註釋使用正體中文
+name: Build ODATest IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 XcodeGen
+        run: brew install xcodegen
+
+      - name: 選擇兼容的 Xcode
+        run: |
+          ls /Applications/ | grep Xcode
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+          else
+            echo "沒有舊版 Xcode，用默認的"
+          fi
+          xcodebuild -version
+
+      - name: 生成 Xcode 項目
+        run: xcodegen generate
+
+      - name: 編譯並打包（不簽名）
+        run: |
+          xcodebuild archive \
+            -scheme ODATest \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/ODATest.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+          mkdir -p build/ipa/Payload
+          cp -R build/ODATest.xcarchive/Products/Applications/ODATest.app build/ipa/Payload/
+          cd build/ipa && zip -r ../ODATest-unsigned.ipa Payload
+
+      - name: 上傳未簽名 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ODATest-unsigned-ipa
+          path: build/ODATest-unsigned.ipa
