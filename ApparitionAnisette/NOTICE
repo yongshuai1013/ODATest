@@ -1,0 +1,38 @@
+ApparitionAnisette
+==================
+
+This crate is a port of the anisette implementation from Apparition:
+
+    Apparition — https://github.com/illixion/Apparition
+    MIT License, Copyright (c) 2026 Illixion (see LICENSE in this directory)
+
+Files taken from Apparition's `core/src/anisette/`, with only the
+adaptations listed below:
+
+    src/elf.rs   <- core/src/anisette/elf.rs   (ELF loader)
+    src/shim.rs  <- core/src/anisette/shim.rs  (Bionic "libc" shims)
+    src/adi.rs   <- core/src/anisette/adi.rs   (ADI driver)
+
+Adaptations made for ODATest / iOS 15 (target aarch64-apple-ios,
+embedded as a static library):
+
+  * The upstream `rootcause` dependency was removed. Errors are plain
+    `String`s via the crate-local `Result<T>` alias, with minimal
+    `bail!` / `report!` macros keeping the original call sites intact.
+  * Module paths were rewired to this crate (`crate::elf`,
+    `crate::shim`); visibility widened from `pub(super)` to
+    `pub(crate)` where needed.
+  * `src/lib.rs` (the C FFI surface) is new and specific to ODATest.
+  * NOT ported: upstream `server.rs` (the v3 HTTP server), `native.rs`
+    (macOS-native anisette) and `apk.rs` (APK download/extraction).
+    The Swift side of ODATest supplies the two library files, the
+    provisioning folder and the network round-trip (spim/cpim).
+
+Deliberately unchanged behaviour (variables under test — do not "fix"):
+
+  * The obfuscated libstoreservicescore export names in adi.rs
+    (kq56gsgHG6, Sph98paBcz, nf92ngaK92, fy34trz2st, uv5t6nhkui,
+    rsegvyrt87, aslgmuibau, jk24uiwqrg, qi864985u0) and DS_ID = -2.
+  * `shim_property_get` in shim.rs reports every Android system
+    property as unset (writes an empty string, returns 0).
+  * The ELF loader does not run DT_INIT / DT_INIT_ARRAY initializers.

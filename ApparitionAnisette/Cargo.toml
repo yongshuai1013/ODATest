@@ -1,0 +1,19 @@
+# ApparitionAnisette — Apparition's in-process ADI anisette engine
+# (native ELF loader + shim + ADI driver), ported as a standalone crate
+# for ODATest on iOS 15. See NOTICE for provenance and licence.
+#
+# MIT License, Copyright (c) 2026 Illixion (upstream portions).
+
+[package]
+name = "apparition-anisette"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Apparition's Android-library ADI engine (ELF loader, shim, ADI driver) as a static library for ODATest / iOS 15"
+
+[lib]
+name = "apparition_anisette"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+libc = "0.2"
