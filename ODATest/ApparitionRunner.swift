@@ -221,10 +221,11 @@ final class ApparitionRunner: ObservableObject {
         var session: UInt32 = 0
         var cpimLen = 0
         var cpimBuf = [UInt8](repeating: 0, count: 65536)
+        let cpimCapacity = cpimBuf.count
         let spimBytes = [UInt8](spim)
         let rc = spimBytes.withUnsafeBufferPointer { ptr in
             cpimBuf.withUnsafeMutableBufferPointer { out in
-                apparition_adi_start_provisioning(ptr.baseAddress, spimBytes.count, &session, out.baseAddress, cpimBuf.count, &cpimLen)
+                apparition_adi_start_provisioning(ptr.baseAddress, spimBytes.count, &session, out.baseAddress, cpimCapacity, &cpimLen)
             }
         }
         guard rc == 0 else {
