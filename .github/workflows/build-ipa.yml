@@ -5,7 +5,7 @@ name: Build ODATest IPA
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feat/apparition-engine]
 
 jobs:
   build:
@@ -13,6 +13,14 @@ jobs:
     steps:
       - name: 檢出代碼
         uses: actions/checkout@v4
+
+      - name: 安裝 Rust（aarch64-apple-ios）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: 構建 ApparitionAnisette 靜態庫
+        run: bash scripts/build-anisette.sh
 
       - name: 安裝 XcodeGen
         run: brew install xcodegen
