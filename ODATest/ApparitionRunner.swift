@@ -161,8 +161,12 @@ final class ApparitionRunner: ObservableObject {
         if engineStarted { return }
         try FileManager.default.createDirectory(at: provDir, withIntermediateDirectories: true)
         await note("啟動 Apparition 引擎（原生載入 .so，需 JIT）…")
+        // CoreADI 的 set_identifier 只收 16 字元識別碼（UUID 連字號形式的前 16 字元，
+        // 即 Apparition adi_identifier 的格式）；傳完整 36 字元 UUID 會被回 ADI -45001。
+        let adiIdentifier = String(identifier.uuidString.prefix(16))
+        await note("ADI 識別碼（16 字元）= \(adiIdentifier)")
         var errBuf = [CChar](repeating: 0, count: 512)
-        let rc = apparition_adi_init(servicesPath.path, corePath.path, provDir.path, identifier.uuidString, &errBuf, errBuf.count)
+        let rc = apparition_adi_init(servicesPath.path, corePath.path, provDir.path, adiIdentifier, &errBuf, errBuf.count)
         guard rc == 0 else {
             throw NSError(domain: "Apparition", code: Int(rc), userInfo: [NSLocalizedDescriptionKey: "引擎 init 失敗 rc=\(rc)：\(String(cString: errBuf))"])
         }
