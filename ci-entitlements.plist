@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 對照實驗：SideStore 免費版 entitlements 缺這兩個，ODA 的 Unicorn 引擎
+	     分配 translator buffer 時容易爆。帶上後用 TrollStore 安裝可保留。 -->
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
+	<true/>
+	<!-- TrollStore 以此判斷 isDebuggable：有它長按選單才出現「以 JIT 模式打开」，
+	     apple-magnifier://enable-jit 也才放行。Apparition 原生引擎必需。 -->
+	<key>get-task-allow</key>
+	<true/>
+</dict>
+</plist>
