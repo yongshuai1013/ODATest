@@ -36,7 +36,15 @@ struct ApparitionSection: View {
             if runner.busy {
                 Text("⏳ 執行中… 已 \(runner.elapsed) 秒").font(.subheadline).foregroundColor(.orange)
             }
-            Text("⚠️ 跑之前先用 TrollStore／StikDebug 對本 App 開 JIT；墊片餵的裝置屬性全空（與 Unicorn 版的 Pixel 5 模板成對照）。")
+            Button {
+                if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=com.pax.odatest") {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Text("① 用 TrollStore 開 JIT（會以 JIT 重開本 App）").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            Text("需先在 TrollStore 設定裡打開「URL Scheme Enabled」。重開後再按下方登入。墊片餵的裝置屬性全空（與 Unicorn 版的 Pixel 5 模板成對照）。")
                 .font(.caption).foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

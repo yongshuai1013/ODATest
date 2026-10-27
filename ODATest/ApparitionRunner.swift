@@ -74,7 +74,7 @@ final class ApparitionRunner: ObservableObject {
     init() {
         refreshStatus()
         log("Apparition 引擎就緒。identifier = \(identifier.uuidString)")
-        log("⚠️ 原生執行需 JIT：請先用 TrollStore／StikDebug 對本 App 開 JIT，否則載庫會失敗或閃退")
+        log("⚠️ 原生執行需 JIT：先按上方「用 TrollStore 開 JIT」以 JIT 重開本 App，再登入；否則載庫會失敗或閃退")
     }
 
     func refreshStatus() {
