@@ -285,19 +285,17 @@ final class ApparitionRunner: ObservableObject {
                 try await self.ensureEngine()
                 try await self.provisionIfNeeded()
                 await self.note("取 OTP…")
-                var midLen = 0, otpLen = 0
-                _ = apparition_adi_request_otp(nil, 0, &midLen, nil, 0, &otpLen)
-                // 容量先快照成 let、出參用另一組變量：同一呼叫裡又讀又 & 傳同一個 var
-                // 會觸發 Swift 獨佔存取衝突（#6 cpimBuf 同型 bug），容量會讀到錯值。
-                let midCap = midLen, otpCap = otpLen
-                var mid = [UInt8](repeating: 0, count: midCap)
-                var otp = [UInt8](repeating: 0, count: otpCap)
+                // 單次呼叫＋寬裕固定緩衝（MID/OTP 都是小 blob）：兩段式在真機連兩次回
+                // rc=1（#12/#13），原因未明，先用最笨最穩的形狀並把長度印進日誌定位。
+                var mid = [UInt8](repeating: 0, count: 4096)
+                var otp = [UInt8](repeating: 0, count: 4096)
                 var midOut = 0, otpOut = 0
                 let rc = mid.withUnsafeMutableBufferPointer { m in
                     otp.withUnsafeMutableBufferPointer { o in
-                        apparition_adi_request_otp(m.baseAddress, midCap, &midOut, o.baseAddress, otpCap, &otpOut)
+                        apparition_adi_request_otp(m.baseAddress, 4096, &midOut, o.baseAddress, 4096, &otpOut)
                     }
                 }
+                await self.note("request_otp rc=\(rc)，mid 長度=\(midOut)，otp 長度=\(otpOut)")
                 guard rc == 0 else {
                     throw NSError(domain: "Apparition", code: Int(rc), userInfo: [NSLocalizedDescriptionKey: "request_otp 失敗 rc=\(rc)：\(await self.lastError())"])
                 }
