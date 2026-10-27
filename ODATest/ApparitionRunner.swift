@@ -287,11 +287,15 @@ final class ApparitionRunner: ObservableObject {
                 await self.note("取 OTP…")
                 var midLen = 0, otpLen = 0
                 _ = apparition_adi_request_otp(nil, 0, &midLen, nil, 0, &otpLen)
-                var mid = [UInt8](repeating: 0, count: midLen)
-                var otp = [UInt8](repeating: 0, count: otpLen)
+                // 容量先快照成 let、出參用另一組變量：同一呼叫裡又讀又 & 傳同一個 var
+                // 會觸發 Swift 獨佔存取衝突（#6 cpimBuf 同型 bug），容量會讀到錯值。
+                let midCap = midLen, otpCap = otpLen
+                var mid = [UInt8](repeating: 0, count: midCap)
+                var otp = [UInt8](repeating: 0, count: otpCap)
+                var midOut = 0, otpOut = 0
                 let rc = mid.withUnsafeMutableBufferPointer { m in
                     otp.withUnsafeMutableBufferPointer { o in
-                        apparition_adi_request_otp(m.baseAddress, midLen, &midLen, o.baseAddress, otpLen, &otpLen)
+                        apparition_adi_request_otp(m.baseAddress, midCap, &midOut, o.baseAddress, otpCap, &otpOut)
                     }
                 }
                 guard rc == 0 else {
@@ -299,8 +303,8 @@ final class ApparitionRunner: ObservableObject {
                 }
                 let fmt = ISO8601DateFormatter()
                 let data = AnisetteData(
-                    machineID: Data(mid).base64EncodedString(),
-                    oneTimePassword: Data(otp).base64EncodedString(),
+                    machineID: Data(mid.prefix(midOut)).base64EncodedString(),
+                    oneTimePassword: Data(otp.prefix(otpOut)).base64EncodedString(),
                     localUserID: await self.mdLU,
                     routingInfo: "17106176",
                     deviceID: await self.identifier.uuidString,
