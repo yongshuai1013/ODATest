@@ -28,6 +28,7 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        SWIFT_OBJC_BRIDGING_HEADER: ODATest/ODATest-Bridging-Header.h
         # ApparitionAnisette 靜態庫（scripts/build-anisette.sh 先行構建，佈局比照 Apparition 上游）
         HEADER_SEARCH_PATHS: $(SRCROOT)/build/anisette-out/include
         LIBRARY_SEARCH_PATHS: $(SRCROOT)/build/anisette-out/lib/$(PLATFORM_NAME)

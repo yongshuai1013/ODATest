@@ -18,6 +18,7 @@ struct ContentView: View {
                         accountSection
                     }
                     logSection
+                    ApparitionSection()
                 }
                 .padding()
             }
