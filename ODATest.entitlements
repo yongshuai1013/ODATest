@@ -8,5 +8,9 @@
 	<true/>
 	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
 	<true/>
+	<!-- TrollStore 以此判斷 isDebuggable：有它長按選單才出現「以 JIT 模式打开」，
+	     apple-magnifier://enable-jit 也才放行。Apparition 原生引擎必需。 -->
+	<key>get-task-allow</key>
+	<true/>
 </dict>
 </plist>
