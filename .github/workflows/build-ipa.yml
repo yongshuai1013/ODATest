@@ -52,11 +52,18 @@ jobs:
             CODE_SIGNING_REQUIRED=NO
           mkdir -p build/ipa/Payload
           cp -R build/ODATest.xcarchive/Products/Applications/ODATest.app build/ipa/Payload/
-          # ad-hoc 簽名並嵌入 entitlements（increased-memory-limit 等）：
-          # TrollStore 安裝時會讀取並保留這些 entitlements，正是本次對照實驗所需
-          codesign --force --sign - --entitlements ODATest.entitlements --timestamp=none build/ipa/Payload/ODATest.app
-          echo "=== embedded entitlements ==="
-          codesign -d --entitlements - build/ipa/Payload/ODATest.app || true
+          # 用 ldid 嵌入 entitlements（TrollStore 自家簽名器，行為可預期）：
+          # 先前用 codesign 簽出的包 entitlements 是空 Dict（#9 實測），故換 ldid，
+          # 並在 CI 內驗證 get-task-allow 真的寫進去了，缺了直接紅，不再靜默出空包。
+          brew install ldid
+          echo "=== entitlements 輸入檔 ==="
+          cat ODATest.entitlements
+          ldid -SODATest.entitlements build/ipa/Payload/ODATest.app
+          echo "=== embedded entitlements（ldid -e）==="
+          ldid -e build/ipa/Payload/ODATest.app/ODATest | tee /tmp/embedded-entitlements.plist
+          grep -q 'get-task-allow' /tmp/embedded-entitlements.plist || { echo '❌ get-task-allow 未嵌入，停止出包'; exit 1; }
+          grep -q 'increased-memory-limit' /tmp/embedded-entitlements.plist || { echo '❌ increased-memory-limit 未嵌入'; exit 1; }
+          echo "✅ entitlements 已驗證嵌入"
           cd build/ipa && zip -r ../ODATest-unsigned.ipa Payload
 
       - name: 上傳未簽名 IPA
