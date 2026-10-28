@@ -29,4 +29,7 @@ sha2 = "0.11"
 plist = "1.8"
 plist-macro = "0.1.4"
 serde_json = "1"
+# Same rustls build isideload uses; the login installs its ring provider
+# process-wide (reqwest is built rustls-no-provider and panics otherwise).
+rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "std"] }
 http = "1.4"

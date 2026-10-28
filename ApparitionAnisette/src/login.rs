@@ -46,6 +46,18 @@ use crate::{fail, with_engine, write_error};
 
 static DIAG_PATH: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
 static HOOK_ONCE: std::sync::Once = std::sync::Once::new();
+static PROVIDER_ONCE: std::sync::Once = std::sync::Once::new();
+
+/// reqwest in isideload is built `rustls-no-provider`: building a Client
+/// panics ("No rustls crypto provider is configured") unless a provider
+/// is installed process-wide first. Apparition's core does this on its
+/// own init path; our FFI entry does it here. Errors (already installed)
+/// are fine.
+fn install_crypto_provider() {
+    PROVIDER_ONCE.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 pub(crate) fn diag(stage: &str) {
     let guard = DIAG_PATH.lock().ok();
@@ -454,6 +466,7 @@ where
     P: AnisetteProvider + Send + Sync + 'static,
 {
     install_panic_hook();
+    install_crypto_provider();
     diag("stage: login entry");
     let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
         Ok(runtime) => runtime,
