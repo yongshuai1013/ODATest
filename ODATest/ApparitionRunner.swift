@@ -316,12 +316,11 @@ final class ApparitionRunner: ObservableObject {
                 await self.note("anisette 就緒：MD=\(data.oneTimePassword.prefix(10))… RINFO=\(data.routingInfo)")
 
                 await self.note("向 Apple 登入（SRP）…")
-                // 重點：SRP 請求的 X-MMe-Client-Info 取自 DeveloperPortal 的 customHeaders
-                // （grandSlam.clientInfo），不是 anisetteData.clientInfo。#14 沒設它，
-                // 實際送出的是 SideSign 預設（Windows）自稱，與 Android ADI 不一致被回 503。
-                let headers = SideSignHeaders(grandSlam: .init(clientInfo: currentClaim))
+                // 上游 SideSign 的 sendAuthenticationRequest 直接用 anisetteData.clientInfo
+                // 當 X-MMe-Client-Info（#15 查 fork 誤判為 customHeaders，已撤回）：
+                // 自稱本來就有送出，這裡只把實際送出的值印進日誌備查。
                 await self.note("SRP 自稱（X-MMe-Client-Info）= \(currentClaim)")
-                let portal = DeveloperPortal(customHeaders: headers)
+                let portal = DeveloperPortal()
                 let handler: DeveloperPortal.VerificationHandler = { req in
                     try await bridge.enqueue(req)
                 }
