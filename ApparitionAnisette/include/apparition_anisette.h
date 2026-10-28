@@ -50,6 +50,43 @@ int32_t apparition_adi_request_otp(uint8_t *out_mid, size_t out_mid_capacity, si
 /// 最近一次 FFI 錯誤訊息（NUL 結尾，過長截斷）。
 int32_t apparition_adi_last_error(char *err_buf, size_t err_len);
 
+
+/// 2FA callback for `apparition_login`: `params_json` describes the
+/// prompt (unknown / sms / trusted numbers / last_error); write back one
+/// NUL-terminated action string into `out_action`: "code:<digits>",
+/// "sms:<number id>", "devices", "resend" or "abort". Return 0 on success.
+typedef int32_t (*apparition_two_factor_callback)(void *ctx, const char *params_json, char *out_action, size_t out_action_cap);
+
+/// Signs in with isideload (Apparition's vendoured copy) over the local
+/// ADI engine's anisette; the engine must already be initialized with
+/// `apparition_adi_init` for the same identifier + data_dir. Returns 0 on
+/// success (summary in `out_summary`), 2 on sign-in failure (error in
+/// `err_buf`, prefixed with the GrandSlam auth code when there is one),
+/// -2 on invalid arguments.
+int32_t apparition_login(const char *email, const char *password,
+                         const char *identifier_uuid, const char *data_dir,
+                         apparition_two_factor_callback two_factor_cb, void *two_factor_ctx,
+                         char *out_summary, size_t out_summary_cap,
+                         char *err_buf, size_t err_len);
+
+
+/// Anisette callback for `apparition_login_with_headers`: kind 0 fetches
+/// headers JSON ({"machine_id","one_time_password","routing_info",
+/// "device_id","local_user_id"}) into `out_json` — return 0 on success,
+/// 1 when the anisette isn't provisioned, anything else on error;
+/// kind 1 (re)provisions and returns 0 on success.
+typedef int32_t (*apparition_headers_callback)(void *ctx, int32_t kind, char *out_json, size_t out_json_cap);
+
+/// Signs in with isideload using anisette supplied by the app through
+/// `headers_cb`, claiming `claim_client_info`. Same return contract as
+/// `apparition_login`.
+int32_t apparition_login_with_headers(const char *email, const char *password,
+                                      const char *claim_client_info,
+                                      apparition_headers_callback headers_cb, void *headers_ctx,
+                                      apparition_two_factor_callback two_factor_cb, void *two_factor_ctx,
+                                      char *out_summary, size_t out_summary_cap,
+                                      char *err_buf, size_t err_len);
+
 #ifdef __cplusplus
 }
 #endif

@@ -26,6 +26,8 @@ final class ApparitionRunner: ObservableObject {
     @Published var claimAndroid: Bool = UserDefaults.standard.object(forKey: "apparition.claimAndroid") as? Bool ?? true
 
     let twoFactor = TwoFactorBridge()
+    /// isideload（Rust）登入專用的 2FA 橋（回調形狀與 SideSign 不同）
+    let rustTwoFactor = RustTwoFactorBridge()
     private var authSession: AuthSession?
     private var timer: Timer?
     private var engineStarted = false
@@ -344,6 +346,56 @@ final class ApparitionRunner: ObservableObject {
                         self.log("  • \(t.name)（\(t.identifier)）")
                     }
                     self.endBusy()
+                }
+            } catch {
+                await self.finishFail(error, started: started)
+            }
+        }
+    }
+
+    // MARK: - 登入（isideload / Rust 全套：OTP、佈建、SRP、2FA、token 都在 Rust 內）
+
+    func loginWithRust() {
+        guard !busy else { return }
+        let id = appleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, !password.isEmpty else {
+            log("⚠️ 請先輸入 Apple ID 和密碼")
+            return
+        }
+        UserDefaults.standard.set(id, forKey: "oda.appleID")
+        let pwd = password
+        let tfBridge = rustTwoFactor
+        let ident = identifier
+        let prov = provDir
+        beginBusy()
+        log("開始登入（isideload / Rust 全套）：\(id)，提供者固定自稱 Android（token 段自動改 Mac）")
+        let started = Date()
+        Task.detached {
+            do {
+                try await self.ensureLibraries()
+                try await self.ensureEngine()
+                await self.note("交給 isideload：取 OTP／佈建／SRP／2FA／Xcode token 全在 Rust 內完成…")
+                let tfCtx = Unmanaged.passUnretained(tfBridge).toOpaque()
+                var summary = [CChar](repeating: 0, count: 8192)
+                var err = [CChar](repeating: 0, count: 32768)
+                let rc = apparition_login(id, pwd, ident.uuidString, prov.path,
+                                          odatest_rust_two_factor, tfCtx,
+                                          &summary, summary.count, &err, err.count)
+                if rc == 0 {
+                    let text = String(cString: summary)
+                    let parsed = parseRustSummary(text)
+                    let secs = Int(Date().timeIntervalSince(started))
+                    await MainActor.run {
+                        self.accountSummary = parsed.headline
+                        self.teams = parsed.teams
+                        self.password = ""
+                        self.log("✅ isideload 登入完成，耗時 \(secs) 秒")
+                        for line in text.split(separator: "\n") { self.log("  \(line)") }
+                        self.endBusy()
+                    }
+                } else {
+                    await self.note("❌ isideload 登入失敗 rc=\(rc)：\(String(cString: err))")
+                    await MainActor.run { self.endBusy() }
                 }
             } catch {
                 await self.finishFail(error, started: started)

@@ -32,6 +32,7 @@ macro_rules! report {
 
 pub(crate) mod adi;
 pub(crate) mod elf;
+pub(crate) mod login;
 pub(crate) mod shim;
 
 // ---------------------------------------------------------------------
@@ -65,9 +66,9 @@ pub const APPARITION_ADI_ERROR: i32 = -3;
 pub const APPARITION_ADI_INTERNAL_ERROR: i32 = i32::MIN;
 
 static ENGINE: OnceLock<Mutex<Option<Adi>>> = OnceLock::new();
-static LAST_ERROR: Mutex<String> = Mutex::new(String::new());
+pub(crate) static LAST_ERROR: Mutex<String> = Mutex::new(String::new());
 
-fn engine() -> &'static Mutex<Option<Adi>> {
+pub(crate) fn engine() -> &'static Mutex<Option<Adi>> {
     ENGINE.get_or_init(|| Mutex::new(None))
 }
 
@@ -77,14 +78,14 @@ fn set_last_error(message: &str) {
     }
 }
 
-fn fail(code: i32, message: &str) -> i32 {
+pub(crate) fn fail(code: i32, message: &str) -> i32 {
     set_last_error(message);
     code
 }
 
 /// Copies `message` into the caller's error buffer, NUL-terminated and
 /// truncated to fit. A null buffer or zero length is allowed (ignored).
-unsafe fn write_error(err_buf: *mut c_char, err_len: usize, message: &str) {
+pub(crate) unsafe fn write_error(err_buf: *mut c_char, err_len: usize, message: &str) {
     if err_buf.is_null() || err_len == 0 {
         return;
     }
@@ -128,7 +129,7 @@ unsafe fn read_c_str(ptr: *const c_char, what: &str) -> std::result::Result<&'st
 }
 
 /// Runs `job` on the ADI thread of the initialized engine.
-fn with_engine<R: Send + 'static>(job: impl FnOnce(&adi::Exports) -> R + Send + 'static) -> std::result::Result<R, i32> {
+pub(crate) fn with_engine<R: Send + 'static>(job: impl FnOnce(&adi::Exports) -> R + Send + 'static) -> std::result::Result<R, i32> {
     let guard = engine().lock().map_err(|_| fail(APPARITION_ADI_ERROR, "the engine lock is poisoned"))?;
     let adi = guard.as_ref().ok_or(APPARITION_NOT_INITIALIZED)?;
     adi.run(job).map_err(|e| fail(APPARITION_ADI_ERROR, &e))

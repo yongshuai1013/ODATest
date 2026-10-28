@@ -12,7 +12,9 @@ struct ApparitionSection: View {
             Divider()
             Text("Apparition 引擎（原生執行）").font(.title3).bold()
             statusPart
-            if let req = runner.twoFactor.request {
+            if let req = runner.rustTwoFactor.request {
+                RustTwoFactorPanel(bridge: runner.rustTwoFactor, request: req)
+            } else if let req = runner.twoFactor.request {
                 twoFactorPart(req)
             } else if runner.accountSummary == nil {
                 loginPart
@@ -79,6 +81,15 @@ struct ApparitionSection: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(runner.busy || runner.appleID.isEmpty || runner.password.isEmpty)
+            Button {
+                runner.loginWithRust()
+            } label: {
+                Text("以 Rust（isideload）登入").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(runner.busy || runner.appleID.isEmpty || runner.password.isEmpty)
+            Text("Rust 版：登入全程走他們的 isideload（GrandSlam＋2FA＋token），anisette 由本區的原生引擎在進程內提供，自稱固定 Android、token 段改 Mac。")
+                .font(.caption).foregroundColor(.secondary)
             Button("重置 ADI（刪 Apparition 的 adi.pb）") { runner.resetADI() }
                 .font(.subheadline)
                 .disabled(runner.busy)

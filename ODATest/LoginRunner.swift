@@ -41,6 +41,8 @@ final class LoginRunner: ObservableObject {
     @Published var adiReady: Bool = false
 
     let twoFactor = TwoFactorBridge()
+    /// isideload（Rust）登入專用的 2FA 橋（回調形狀與 SideSign 不同）
+    let rustTwoFactor = RustTwoFactorBridge()
     private var authSession: AuthSession?
     private var timer: Timer?
 
@@ -172,6 +174,94 @@ final class LoginRunner: ObservableObject {
                 }
             } catch {
                 await self.finishFail(error, started: started)
+            }
+        }
+    }
+
+    // MARK: - 登入（isideload / Rust：anisette 仍由 AnisetteDataManager 生成，登入全走 Rust）
+
+    func loginWithRust() {
+        guard !busy else { return }
+        let id = appleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, !password.isEmpty else {
+            log("⚠️ 請先輸入 Apple ID 和密碼")
+            return
+        }
+        UserDefaults.standard.set(id, forKey: "oda.appleID")
+        let pwd = password
+        let base = baseDir
+        let adiURL = adiFile
+        let ident = identifier
+        let tfBridge = rustTwoFactor
+        beginBusy()
+        log("開始登入（isideload / Rust 全套）：\(id)，anisette 由 AnisetteDataManager（Unicorn）提供，自稱 Android")
+        let started = Date()
+        Task.detached {
+            // anisette 來源：每次 Rust 需要新數據就回調進來，用信號量把
+            // AnisetteDataManager 的 async 取數橋成同步（在 Rust 線程上阻塞）。
+            let source = RustHeadersSource { kind in
+                if kind == 1 {
+                    try? FileManager.default.removeItem(at: adiURL)
+                }
+                let semaphore = DispatchSemaphore(value: 0)
+                var result: (Int32, String) = (2, "")
+                Task.detached {
+                    do {
+                        let manager = AnisetteDataManager(mode: nil, baseDirectory: base)
+                        let odaURL = URL(string: "https://zzz.haus/oda.json")!
+                        let existing = try? Data(contentsOf: adiURL)
+                        let (data, newBlob) = try await manager.fetchAnisetteData(
+                            mode: .remoteODA(sourceURL: odaURL, fallbackURL: odaURL),
+                            identifier: ident,
+                            existingAdiBlob: existing
+                        )
+                        if let blob = newBlob {
+                            try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+                            try? blob.write(to: adiURL)
+                        }
+                        let obj: [String: String] = [
+                            "machine_id": data.machineID,
+                            "one_time_password": data.oneTimePassword,
+                            "routing_info": data.routingInfo,
+                            "device_id": data.deviceID,
+                            "local_user_id": data.localUserID,
+                        ]
+                        let json = (try? JSONSerialization.data(withJSONObject: obj))
+                            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                        result = json.isEmpty ? (2, "") : (0, json)
+                    } catch {
+                        result = (2, "")
+                    }
+                    semaphore.signal()
+                }
+                _ = semaphore.wait(timeout: .now() + 900)
+                return result
+            }
+            var summary = [CChar](repeating: 0, count: 8192)
+            var err = [CChar](repeating: 0, count: 32768)
+            let headersCtx = Unmanaged.passUnretained(source).toOpaque()
+            let tfCtx = Unmanaged.passUnretained(tfBridge).toOpaque()
+            let rc = apparition_login_with_headers(
+                id, pwd, ApparitionRunner.androidClientInfo,
+                odatest_rust_headers, headersCtx,
+                odatest_rust_two_factor, tfCtx,
+                &summary, summary.count, &err, err.count
+            )
+            if rc == 0 {
+                let text = String(cString: summary)
+                let parsed = parseRustSummary(text)
+                let secs = Int(Date().timeIntervalSince(started))
+                await MainActor.run {
+                    self.accountSummary = parsed.headline
+                    self.teams = parsed.teams
+                    self.password = ""
+                    self.log("✅ isideload 登入完成，耗時 \(secs) 秒")
+                    for line in text.split(separator: "\n") { self.log("  \(line)") }
+                    self.endBusy()
+                }
+            } else {
+                await self.note("❌ isideload 登入失敗 rc=\(rc)：\(String(cString: err))")
+                await MainActor.run { self.endBusy() }
             }
         }
     }

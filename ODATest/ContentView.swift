@@ -10,7 +10,9 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     statusSection
-                    if let req = runner.twoFactor.request {
+                    if let req = runner.rustTwoFactor.request {
+                        RustTwoFactorPanel(bridge: runner.rustTwoFactor, request: req)
+                    } else if let req = runner.twoFactor.request {
                         twoFactorSection(req)
                     } else if runner.accountSummary == nil {
                         loginSection
@@ -72,6 +74,16 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(runner.busy || runner.appleID.isEmpty || runner.password.isEmpty)
+            Button {
+                runner.loginWithRust()
+            } label: {
+                Text("以 Rust（isideload）登入").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(runner.busy || runner.appleID.isEmpty || runner.password.isEmpty)
+            Text("Rust 版：登入全程走他們的 isideload（GrandSlam＋2FA＋token），anisette 仍由本機 AnisetteDataManager 生成，自稱 Android、token 段改 Mac。")
+                .font(.caption)
+                .foregroundColor(.secondary)
             Text("密碼只會傳給 Apple（gsa.apple.com），不保存、不寫入日誌。登入全程用本機生成的 anisette（ODA），不經任何遠端 anisette 伺服器。")
                 .font(.caption)
                 .foregroundColor(.secondary)
