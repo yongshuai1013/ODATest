@@ -73,10 +73,19 @@ final class ApparitionRunner: ObservableObject {
         SHA256.hash(data: Data(identifierBytes)).map { String(format: "%02x", $0) }.joined()
     }
 
+    var diagURL: URL { baseDir.appendingPathComponent("rust-diagnostics.txt") }
+
     init() {
         refreshStatus()
         log("Apparition 引擎就緒。identifier = \(identifier.uuidString)")
         log("⚠️ 原生執行需 JIT：先按上方「用 TrollStore 開 JIT」以 JIT 重開本 App，再登入；否則載庫會失敗或閃退")
+        // 上次 Rust 登入若閃退，它的階段標記／panic 報告會留在診斷檔裡
+        apparition_set_diagnostic_log(diagURL.path)
+        if let text = try? String(contentsOf: diagURL, encoding: .utf8), !text.isEmpty {
+            log("📋 上次 Rust 登入的診斷記錄：")
+            for line in text.split(separator: "\n") { log("  \(line)") }
+            try? FileManager.default.removeItem(at: diagURL)
+        }
     }
 
     func refreshStatus() {
@@ -367,6 +376,10 @@ final class ApparitionRunner: ObservableObject {
         let tfBridge = rustTwoFactor
         let ident = identifier
         let prov = provDir
+        // 診斷檔指向本區的路徑並清空舊記錄（階段標記會即時寫入，閃退也留得下）
+        try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: diagURL)
+        apparition_set_diagnostic_log(diagURL.path)
         beginBusy()
         log("開始登入（isideload / Rust 全套）：\(id)，提供者固定自稱 Android（token 段自動改 Mac）")
         let started = Date()

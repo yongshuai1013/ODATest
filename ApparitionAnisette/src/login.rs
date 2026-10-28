@@ -35,6 +35,55 @@ use sha2::{Digest, Sha256};
 
 use crate::{fail, with_engine, write_error};
 
+// MARK: - Diagnostics (stage markers + panic capture)
+//
+// The login runs across an FFI boundary, where a Rust panic aborts the
+// process before Swift can see anything. Stage markers and the panic
+// hook write to a file that survives the crash; the app sets its path
+// with `apparition_set_diagnostic_log` and shows the contents on the
+// next launch. `apparition_login*` also catch_unwinds, turning a panic
+// in the sign-in flow into a normal error return whenever possible.
+
+static DIAG_PATH: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+static HOOK_ONCE: std::sync::Once = std::sync::Once::new();
+
+pub(crate) fn diag(stage: &str) {
+    let guard = DIAG_PATH.lock().ok();
+    let Some(Some(path)) = guard.as_ref().map(|g| g.as_ref()) else { return };
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{stage}");
+    }
+}
+
+fn install_panic_hook() {
+    HOOK_ONCE.call_once(|| {
+        std::panic::set_hook(Box::new(|info| {
+            let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = info.payload().downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "<non-string payload>".to_string()
+            };
+            let location = info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_else(|| "?".to_string());
+            diag(&format!("PANIC: {payload} @ {location}"));
+        }));
+    });
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn apparition_set_diagnostic_log(path: *const c_char) {
+    if path.is_null() {
+        return;
+    }
+    if let Ok(text) = unsafe { CStr::from_ptr(path) }.to_str() {
+        if let Ok(mut guard) = DIAG_PATH.lock() {
+            *guard = Some(std::path::PathBuf::from(text));
+        }
+    }
+}
+
 /// An Android phone running Apple Music, for anisette made by Apple Music's Android libraries.
 pub const ANDROID_CLIENT_INFO: &str = "<Pixel 8><Android; 14; UQ1A.240205.004><com.apple.AuthKit/1 (com.apple.android.music/4.9.6)>";
 /// A Mac's AuthKit daemon, claimed after sign-in for the Xcode token.
@@ -98,6 +147,7 @@ impl LocalAdiProvider {
 #[async_trait::async_trait]
 impl AnisetteProvider for LocalAdiProvider {
     async fn get_anisette_data(&self) -> Result<AnisetteDataResponse, Report> {
+        diag("stage: anisette requested (engine login_code probe)");
         let code = engine_call(|exports| exports.login_code()).await.map_err(|e| rootcause::report!("{e}"))?;
         if code != 0 {
             // -45061 is "not provisioned"; any other non-zero code gets the
@@ -106,6 +156,7 @@ impl AnisetteProvider for LocalAdiProvider {
             return Ok(AnisetteDataResponse::NeedsProvisioning);
         }
         let otp = engine_call(|exports| exports.request_otp()).await.map_err(|e| rootcause::report!("{e}"))?.map_err(|e| rootcause::report!("{e}"))?;
+        diag("stage: engine OTP ok");
         Ok(AnisetteDataResponse::Data(AnisetteData::new(
             B64.encode(&otp.machine_id),
             B64.encode(&otp.one_time_password),
@@ -121,6 +172,7 @@ impl AnisetteProvider for LocalAdiProvider {
     }
 
     async fn provision(&mut self, gs: &Arc<GrandSlam>, _force_recheck: bool) -> Result<(), Report> {
+        diag("stage: provisioning start");
         // Same exchange as isideload's remote_v3 client performs against
         // Apple (its server half does the ADI calls; here they are local).
         let start_url = gs.get_url("midStartProvisioning")?;
@@ -150,6 +202,7 @@ impl AnisetteProvider for LocalAdiProvider {
         let tk = B64.decode(tk_text).map_err(|e| rootcause::report!("tk isn't base64: {e}"))?;
 
         engine_call(move |exports| exports.end_provisioning(session, &ptm, &tk)).await.map_err(|e| rootcause::report!("{e}"))?.map_err(|e| rootcause::report!("{e}"))?;
+        diag("stage: provisioning done");
         Ok(())
     }
 }
@@ -209,6 +262,7 @@ fn params_json(params: &TwoFactorCallbackParams) -> String {
 
 impl CallbackBridge {
     fn ask(&self, params: TwoFactorCallbackParams) -> std::result::Result<TwoFactorCallbackResponse, String> {
+        diag("stage: 2FA callback invoked");
         let json = params_json(&params);
         let c_json = std::ffi::CString::new(json).map_err(|_| "params JSON contains a NUL".to_string())?;
         let mut buf = vec![0u8; 512];
@@ -272,6 +326,7 @@ impl CallbackProvider {
 #[async_trait::async_trait]
 impl AnisetteProvider for CallbackProvider {
     async fn get_anisette_data(&self) -> Result<AnisetteDataResponse, Report> {
+        diag("stage: anisette requested (app headers callback)");
         let fetched = {
             let this = CallbackProvider { cb: self.cb, ctx: self.ctx, claim: self.claim.clone() };
             tokio::task::spawn_blocking(move || this.fetch(0)).await.map_err(|e| rootcause::report!("anisette callback task stopped: {e}"))?
@@ -323,11 +378,13 @@ where
         }
     };
 
+    diag("stage: account build (URL bag) + SRP login");
     let mut account = AppleAccount::builder(email)
         .anisette_provider(provider)
         .login(password, callback.clone())
         .await
         .context("Apple ID sign-in failed")?;
+    diag("stage: SRP login ok");
 
     // after_sign_in: the Xcode token (and developer requests made with it)
     // are claimed as a Mac when the sign-in claimed Android.
@@ -335,8 +392,12 @@ where
     account.grandslam_client = Arc::new(signing_in.claiming(mac_info()));
 
     let mut session = match DeveloperSession::from_account(&mut account).await {
-        Ok(session) => session,
+        Ok(session) => {
+            diag("stage: developer session ok (Xcode token)");
+            session
+        }
         Err(error) if auth_code(&error) == Some(-22411) => {
+            diag("stage: -22411, second login with code_after_login");
             // An Android-claimed sign-in Apple doesn't trust yet: sign in
             // again with code_after_login so the pushed code gets checked,
             // then claim Mac again for the token.
@@ -350,6 +411,7 @@ where
     };
 
     let teams = session.list_teams().await.context("Failed to list developer teams")?;
+    diag("stage: teams listed");
     let mut summary = format!("登入成功（isideload）：SRP＋2FA 通過、Xcode token 已取得。Teams（{}）：", teams.len());
     for team in &teams {
         summary.push_str(&format!("\n• {}（{}）", team.name.clone().unwrap_or_else(|| "—".to_string()), team.team_id));
@@ -391,6 +453,8 @@ fn finish<P>(
 where
     P: AnisetteProvider + Send + Sync + 'static,
 {
+    install_panic_hook();
+    diag("stage: login entry");
     let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
         Ok(runtime) => runtime,
         Err(e) => {
@@ -398,17 +462,31 @@ where
             return APPARITION_LOGIN_FAILED;
         }
     };
-    match runtime.block_on(sign_in(email, password, provider, bridge)) {
-        Ok(summary) => {
+    diag("stage: tokio runtime built");
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runtime.block_on(sign_in(email, password, provider, bridge))));
+    match outcome {
+        Ok(Ok(summary)) => {
             unsafe { write_error(out_summary, out_summary_cap, &summary) };
             APPARITION_OK
         }
-        Err(error) => {
+        Ok(Err(error)) => {
             let detail = match auth_code(&error) {
                 Some(code) => format!("auth_code={code} — {error:?}"),
                 None => format!("{error:?}"),
             };
             unsafe { write_error(err_buf, err_len, &detail) };
+            APPARITION_LOGIN_FAILED
+        }
+        Err(payload) => {
+            let message = if let Some(s) = payload.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "<non-string panic payload>".to_string()
+            };
+            diag(&format!("stage: panic caught at FFI boundary: {message}"));
+            unsafe { write_error(err_buf, err_len, &format!("Rust panic（已攔截）: {message}")) };
             APPARITION_LOGIN_FAILED
         }
     }
