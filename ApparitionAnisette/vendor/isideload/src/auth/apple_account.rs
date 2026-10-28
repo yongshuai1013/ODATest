@@ -512,7 +512,7 @@ impl AppleAccount {
         });
 
         let res = self
-            .grandslam_client
+            .sms_client()
             .put_sms("https://gsa.apple.com/auth/verify/phone")?
             .headers(self.build_2fa_headers(&anisette_data).await?)
             .body(send_body.to_string())
@@ -582,7 +582,7 @@ impl AppleAccount {
         });
 
         let res = self
-            .grandslam_client
+            .sms_client()
             .post_sms("https://gsa.apple.com/auth/verify/phone/securitycode")?
             .headers(self.build_2fa_headers(&anisette_data).await?)
             .body(body.to_string())
@@ -713,7 +713,7 @@ impl AppleAccount {
             .context("Failed to get anisette data for 2FA")?;
 
         let res = self
-            .grandslam_client
+            .sms_client()
             .get_sms("https://gsa.apple.com/auth")?
             .headers(self.build_2fa_headers(&anisette_data).await?)
             .send()
@@ -752,6 +752,20 @@ impl AppleAccount {
             return Ok(LoginState::NeedsSMS2FA(number.id));
         }
         bail!("Selected trusted number ID not found in trusted numbers");
+    }
+
+    /// ODATest patch #10: the phone-2FA endpoints (send / verify / list
+    /// numbers) refuse the sign-in's Android claim — HTTP 403 with an
+    /// empty body (Apparition's vendored notes saw 401). SideInstaller
+    /// v1.5.1 learned the same lesson: "2FA SMS must use Mac client
+    /// info, Android doesn't support it" — SideSign forces a Mac client
+    /// info for exactly these calls. Do the same here: same client and
+    /// URL bag, claiming a Mac. The sign-in itself keeps its own claim.
+    fn sms_client(&self) -> GrandSlam {
+        self.grandslam_client.claiming(crate::anisette::AnisetteClientInfo {
+            client_info: "<Mac15,7> <macOS;27.0;26A5378j> <com.apple.AuthKit/1 (com.apple.akd/1.0)>".to_string(),
+            user_agent: "akd/1.0 CFNetwork/808.1.4".to_string(),
+        })
     }
 
     async fn build_2fa_headers(&self, anisette_data: &AnisetteData) -> Result<HeaderMap, Report> {

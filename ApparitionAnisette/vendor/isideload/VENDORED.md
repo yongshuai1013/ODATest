@@ -76,3 +76,11 @@ an out-of-crate AnisetteProvider backed by a local in-process ADI engine
 AnisetteData. Upstream constructs AnisetteData only inside the crate
 (remote_v3), leaving the public provider trait unimplementable externally.
 Nothing else in this copy is changed.
+Tenth change (same date, same author): the phone-2FA calls in
+src/auth/apple_account.rs (send_sms_2fa, verify_sms_2fa,
+get_trusted_numbers) now go through a Mac-claimed clone of the GrandSlam
+client (`sms_client()`). With an Android-claimed sign-in the send was
+refused with an empty-body HTTP 403 — the same refusal family as the 401
+in Apparition's notes above. SideInstaller v1.5.1 / SideSign force a Mac
+client info for exactly these calls ("2FA SMS must use Mac client info,
+Android doesn't support it"); the sign-in's own claim is untouched.
