@@ -117,7 +117,7 @@ final class LoginRunner: ObservableObject {
         let bridge = twoFactor
         beginBusy()
         log("開始登入：\(id)")
-        log("實驗變體 v4：v3 信封不變，SideSign 新增 URL bag 前置（同自稱 lookup 後照 bag 地址發 SRP）")
+        log("實驗變體 v5：v4 基礎上 cpd 布林改字串＋loc 寫死 en_US，lookup 結果進日誌")
         let started = Date()
         Task.detached {
             do {
@@ -144,30 +144,37 @@ final class LoginRunner: ObservableObject {
 
                 // 2. SRP 登入（+ 2FA 走 UI 橋）
                 await self.note("步驟 2/3：向 Apple 登入（SRP）…")
-                // v4：v3 的信封（安卓 clientInfo＋固定 UA）真機仍回 503，
-                // 差異只剩呼叫層碰不到的地方。isideload 登入前會先以同一
-                // 自稱打 GsService2/lookup 拿 URL bag、再照 bag 的 gsService
-                // 地址發 SRP，其源碼註解明言自稱對不上時第一個 SRP 請求會
-                // 吃 503；SideSign 原本沒有這一步。SideSign main 新增開關
-                // prefetchURLBag（預設關、行為不變），本版打開它，其餘照
-                // v3。adi.pb 沿用。
+                // v5：v4（信封＋URL bag 前置）真機回 403（原為 503），
+                // 邊緣判決有變但仍被擋。本版把最後一個應用層差異對齊：
+                // cpd 的 bootstrap/icscrec/pbe/prkgen 由 plist 布林改成
+                // 字串 "true"/"false"、loc 寫死 en_US（SideSign 新開關
+                // cpdStringValues）；並把 URL bag 查詢結果記進日誌，
+                // 下次截圖可直接判讀 403 死在哪一步。adi.pb 沿用。
                 var loginHeaders = SideSignHeaders()
                 loginHeaders.grandSlam.clientInfo = "<Pixel 8> <Android; 14; UQ1A.240205.004> <com.apple.AuthKit/1 (com.apple.android.music/4.9.6)>"
                 loginHeaders.grandSlam.userAgent = "akd/1.0 CFNetwork/808.1.4"
                 loginHeaders.grandSlam.xcodeVersion = "27.0 (27A5218g)"
                 loginHeaders.grandSlam.prefetchURLBag = true
+                loginHeaders.grandSlam.cpdStringValues = true
                 let portal = DeveloperPortal(customHeaders: loginHeaders)
-                await self.note("GSA 自稱（v4 全信封對齊＋URL bag 前置）：\(loginHeaders.grandSlam.clientInfo) · UA=\(loginHeaders.grandSlam.userAgent) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
+                await self.note("GSA 自稱（v5 全信封對齊＋URL bag 前置＋cpd 字串）：\(loginHeaders.grandSlam.clientInfo) · UA=\(loginHeaders.grandSlam.userAgent) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
                 let handler: DeveloperPortal.VerificationHandler = { req in
                     try await bridge.enqueue(req)
                 }
-                let session = try await portal.authenticate(
+                let session: AuthSession
+                do {
+                    session = try await portal.authenticate(
                     appleID: id,
                     password: pwd,
                     anisetteData: data,
                     xcodeVersion: "27.0 (27A242)",
                     verificationHandler: handler
-                )
+                    )
+                } catch {
+                    await self.note("URL bag 查詢結果：\(portal.urlBagLookupReport ?? "未執行")")
+                    throw error
+                }
+                await self.note("URL bag 查詢結果：\(portal.urlBagLookupReport ?? "未執行")")
                 await self.note("登入成功：\(session.account.name) <\(session.account.appleID)>")
 
                 // 3. 用 session 拉 teams，證明 session 真的能用
