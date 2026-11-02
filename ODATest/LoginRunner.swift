@@ -117,6 +117,7 @@ final class LoginRunner: ObservableObject {
         let bridge = twoFactor
         beginBusy()
         log("開始登入：\(id)")
+        log("實驗變體：SideSign 登入＋本地 anisette，GSA 身份跟隨 anisette（EiliStore 現行配方）")
         let started = Date()
         Task.detached {
             do {
@@ -139,10 +140,16 @@ final class LoginRunner: ObservableObject {
                     await self.note("新的 adi.pb 已保存（\(blob.count) bytes）")
                 }
                 await self.note("anisette 就緒：MD=\(data.oneTimePassword.prefix(10))… MD-M=\(data.machineID.prefix(10))… RINFO=\(data.routingInfo)")
+                await self.note("ADI 身份：clientInfo=\(data.clientInfo) UA=\(data.userAgent)")
 
                 // 2. SRP 登入（+ 2FA 走 UI 橋）
                 await self.note("步驟 2/3：向 Apple 登入（SRP）…")
-                let portal = DeveloperPortal()
+                var loginHeaders = SideSignHeaders()
+                loginHeaders.grandSlam.clientInfo = data.clientInfo
+                loginHeaders.grandSlam.userAgent = data.userAgent
+                loginHeaders.grandSlam.xcodeVersion = "27.0 (27A5218g)"
+                let portal = DeveloperPortal(customHeaders: loginHeaders)
+                await self.note("GSA 身份已跟隨 anisette：\(loginHeaders.grandSlam.clientInfo) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
                 let handler: DeveloperPortal.VerificationHandler = { req in
                     try await bridge.enqueue(req)
                 }
@@ -150,7 +157,7 @@ final class LoginRunner: ObservableObject {
                     appleID: id,
                     password: pwd,
                     anisetteData: data,
-                    xcodeVersion: "26.0",
+                    xcodeVersion: "27.0 (27A242)",
                     verificationHandler: handler
                 )
                 await self.note("登入成功：\(session.account.name) <\(session.account.appleID)>")
