@@ -117,7 +117,7 @@ final class LoginRunner: ObservableObject {
         let bridge = twoFactor
         beginBusy()
         log("開始登入：\(id)")
-        log("實驗變體 v3：GSA 信封對齊 isideload——安卓 clientInfo＋固定 UA akd/1.0 CFNetwork/808.1.4")
+        log("實驗變體 v4：v3 信封不變，SideSign 新增 URL bag 前置（同自稱 lookup 後照 bag 地址發 SRP）")
         let started = Date()
         Task.detached {
             do {
@@ -144,19 +144,20 @@ final class LoginRunner: ObservableObject {
 
                 // 2. SRP 登入（+ 2FA 走 UI 橋）
                 await self.note("步驟 2/3：向 Apple 登入（SRP）…")
-                // v3：逐欄 diff SideSign 與 isideload 的 SRP 信封後，兩邊只剩
-                // User-Agent 還不一致——isideload 兩種自稱都固定用
-                // "akd/1.0 CFNetwork/808.1.4"（也是 SideSign 自己的預設值），
-                // v1/v2 卻被 anisette data 的 Mac UA 蓋掉。本版 UA 改回該值，
-                // clientInfo 照 v2 的安卓字串，其餘（service iCloud、
-                // headerVersion 1.0.1、authApp、Xcode 版本）本就與 isideload
-                // 相同。adi.pb 沿用。
+                // v4：v3 的信封（安卓 clientInfo＋固定 UA）真機仍回 503，
+                // 差異只剩呼叫層碰不到的地方。isideload 登入前會先以同一
+                // 自稱打 GsService2/lookup 拿 URL bag、再照 bag 的 gsService
+                // 地址發 SRP，其源碼註解明言自稱對不上時第一個 SRP 請求會
+                // 吃 503；SideSign 原本沒有這一步。SideSign main 新增開關
+                // prefetchURLBag（預設關、行為不變），本版打開它，其餘照
+                // v3。adi.pb 沿用。
                 var loginHeaders = SideSignHeaders()
                 loginHeaders.grandSlam.clientInfo = "<Pixel 8> <Android; 14; UQ1A.240205.004> <com.apple.AuthKit/1 (com.apple.android.music/4.9.6)>"
                 loginHeaders.grandSlam.userAgent = "akd/1.0 CFNetwork/808.1.4"
                 loginHeaders.grandSlam.xcodeVersion = "27.0 (27A5218g)"
+                loginHeaders.grandSlam.prefetchURLBag = true
                 let portal = DeveloperPortal(customHeaders: loginHeaders)
-                await self.note("GSA 自稱（v3 全信封對齊）：\(loginHeaders.grandSlam.clientInfo) · UA=\(loginHeaders.grandSlam.userAgent) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
+                await self.note("GSA 自稱（v4 全信封對齊＋URL bag 前置）：\(loginHeaders.grandSlam.clientInfo) · UA=\(loginHeaders.grandSlam.userAgent) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
                 let handler: DeveloperPortal.VerificationHandler = { req in
                     try await bridge.enqueue(req)
                 }
