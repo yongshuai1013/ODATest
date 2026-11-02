@@ -117,7 +117,7 @@ final class LoginRunner: ObservableObject {
         let bridge = twoFactor
         beginBusy()
         log("開始登入：\(id)")
-        log("實驗變體：SideSign 登入＋本地 anisette，GSA 身份跟隨 anisette（EiliStore 現行配方）")
+        log("實驗變體 v2：SideSign 登入＋本地 anisette，GSA 自稱改安卓身份（isideload 實證字串），其餘不變")
         let started = Date()
         Task.detached {
             do {
@@ -144,12 +144,17 @@ final class LoginRunner: ObservableObject {
 
                 // 2. SRP 登入（+ 2FA 走 UI 橋）
                 await self.note("步驟 2/3：向 Apple 登入（SRP）…")
+                // v2 單一變量：ADI 是以安卓身份（Pixel 5／Android 11）provision
+                // 的，AnisetteKit 卻給數據蓋 Mac 的 clientInfo 章；v1 照章自稱
+                // Mac 仍被 SRP 以 -80045 擋下。本版改自稱 isideload 實證可通的
+                // 安卓身份（Pixel 8／Android 14／android.music 4.9.6），UA 與
+                // 其餘設定全照 v1，adi.pb 沿用不重做 provisioning。
                 var loginHeaders = SideSignHeaders()
-                loginHeaders.grandSlam.clientInfo = data.clientInfo
+                loginHeaders.grandSlam.clientInfo = "<Pixel 8> <Android; 14; UQ1A.240205.004> <com.apple.AuthKit/1 (com.apple.android.music/4.9.6)>"
                 loginHeaders.grandSlam.userAgent = data.userAgent
                 loginHeaders.grandSlam.xcodeVersion = "27.0 (27A5218g)"
                 let portal = DeveloperPortal(customHeaders: loginHeaders)
-                await self.note("GSA 身份已跟隨 anisette：\(loginHeaders.grandSlam.clientInfo) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
+                await self.note("GSA 自稱（v2 安卓身份）：\(loginHeaders.grandSlam.clientInfo) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
                 let handler: DeveloperPortal.VerificationHandler = { req in
                     try await bridge.enqueue(req)
                 }
