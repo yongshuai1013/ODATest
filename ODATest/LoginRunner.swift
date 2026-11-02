@@ -117,7 +117,7 @@ final class LoginRunner: ObservableObject {
         let bridge = twoFactor
         beginBusy()
         log("開始登入：\(id)")
-        log("實驗變體 v2：SideSign 登入＋本地 anisette，GSA 自稱改安卓身份（isideload 實證字串），其餘不變")
+        log("實驗變體 v3：GSA 信封對齊 isideload——安卓 clientInfo＋固定 UA akd/1.0 CFNetwork/808.1.4")
         let started = Date()
         Task.detached {
             do {
@@ -144,17 +144,19 @@ final class LoginRunner: ObservableObject {
 
                 // 2. SRP 登入（+ 2FA 走 UI 橋）
                 await self.note("步驟 2/3：向 Apple 登入（SRP）…")
-                // v2 單一變量：ADI 是以安卓身份（Pixel 5／Android 11）provision
-                // 的，AnisetteKit 卻給數據蓋 Mac 的 clientInfo 章；v1 照章自稱
-                // Mac 仍被 SRP 以 -80045 擋下。本版改自稱 isideload 實證可通的
-                // 安卓身份（Pixel 8／Android 14／android.music 4.9.6），UA 與
-                // 其餘設定全照 v1，adi.pb 沿用不重做 provisioning。
+                // v3：逐欄 diff SideSign 與 isideload 的 SRP 信封後，兩邊只剩
+                // User-Agent 還不一致——isideload 兩種自稱都固定用
+                // "akd/1.0 CFNetwork/808.1.4"（也是 SideSign 自己的預設值），
+                // v1/v2 卻被 anisette data 的 Mac UA 蓋掉。本版 UA 改回該值，
+                // clientInfo 照 v2 的安卓字串，其餘（service iCloud、
+                // headerVersion 1.0.1、authApp、Xcode 版本）本就與 isideload
+                // 相同。adi.pb 沿用。
                 var loginHeaders = SideSignHeaders()
                 loginHeaders.grandSlam.clientInfo = "<Pixel 8> <Android; 14; UQ1A.240205.004> <com.apple.AuthKit/1 (com.apple.android.music/4.9.6)>"
-                loginHeaders.grandSlam.userAgent = data.userAgent
+                loginHeaders.grandSlam.userAgent = "akd/1.0 CFNetwork/808.1.4"
                 loginHeaders.grandSlam.xcodeVersion = "27.0 (27A5218g)"
                 let portal = DeveloperPortal(customHeaders: loginHeaders)
-                await self.note("GSA 自稱（v2 安卓身份）：\(loginHeaders.grandSlam.clientInfo) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
+                await self.note("GSA 自稱（v3 全信封對齊）：\(loginHeaders.grandSlam.clientInfo) · UA=\(loginHeaders.grandSlam.userAgent) · Xcode \(loginHeaders.grandSlam.xcodeVersion)")
                 let handler: DeveloperPortal.VerificationHandler = { req in
                     try await bridge.enqueue(req)
                 }
