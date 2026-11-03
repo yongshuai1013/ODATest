@@ -42,6 +42,11 @@ struct ContentView: View {
                 Text(runner.adiReady ? "✅" : "⬜")
                 Text(runner.adiReady ? "adi.pb 已 provisioning" : "adi.pb 尚未 provisioning").font(.subheadline)
             }
+            Button("導出 adi.pb＋身份（ODA 引擎）") {
+                AdiExporter.export(engine: "oda-unicorn", engineLabel: "ODA",
+                                   adiURL: runner.adiFile, identifier: runner.identifier) { runner.log($0) }
+            }
+            .font(.subheadline)
             if runner.busy {
                 Text("⏳ 執行中… 已 \(runner.elapsed) 秒")
                     .font(.subheadline)

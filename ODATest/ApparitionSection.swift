@@ -35,6 +35,11 @@ struct ApparitionSection: View {
                 Text(runner.adiReady ? "✅" : "⬜")
                 Text(runner.adiReady ? "adi.pb 已 provisioning（Apparition 目錄）" : "adi.pb 尚未 provisioning").font(.subheadline)
             }
+            Button("導出 adi.pb＋身份（Apparition 引擎）") {
+                AdiExporter.export(engine: "apparition-native", engineLabel: "Apparition",
+                                   adiURL: runner.adiPbURL, identifier: runner.identifier) { runner.log($0) }
+            }
+            .font(.subheadline)
             if runner.busy {
                 Text("⏳ 執行中… 已 \(runner.elapsed) 秒").font(.subheadline).foregroundColor(.orange)
             }
